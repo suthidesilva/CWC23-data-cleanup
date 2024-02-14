@@ -1,0 +1,338 @@
+---
+title: "Final Project - Suthi de Silva - CSC 285 - 18th Jan 2024"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(readr)
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+library(mosaic)
+library(reshape2)
+library(viridis)
+```
+
+# ICC Cricket World Cup CWC23 All innings
+
+## Scenario
+
+*Cricket, a globally popular sport (second most popular sport on planet, 2.5 billion fans) is known for its rich history, strategic game play, and passionate fan base. Played between two teams, it involves batting, bowling, and fielding. The game unfolds on an oval-shaped field, and the objective is to score runs while dismissing the opposition's players.* 
+
+*In this project, I embark on a journey to leverage the power of RStudio to manipulate, clean up, and visualize data from the Cricket World Cup. Our data set, sourced in CSV format, holds valuable information about matches, teams, players, and various performance metrics. The goal is to refine this data set, ensuring it is devoid of inconsistencies, missing values, and duplicates.* 
+
+**Research Question – How to manipulate, clean up, and better visualize a Cricket World Cup .csv data set with RStudio?** 
+
+This data set has following fields,
+
+  - **team**: 2 or 3 letter code matching that used in player name description.
+
+  - **player**: Standard name used in statsguru innings database. Note: this may not match standard name used in statsguru for teamlists.
+
+  - **bat_or_bowl**: indicates whether row represents a batting or bowling innings
+
+  - **bb_bf**: Ball Bowled or Balls Faced. Provides a consistent and clean statistic. For bowlers, this is a cleaned version of number of overs bowled. So 1.5 overs becomes 11 in the bb_bf column.
+
+  - **runs**: Either runs score by batsman or conceded by bowler. If a batsman produces a not out innings, the data is cleaned to only show the score (eg 100, rather than 100*). Reference can be made to the not_out column to determine if the batsman was out or not.
+
+  - **wkts**: Number of wickets taken by a bowler in this innings.
+
+  - **wicketball_prob**: Number of wickets taken (or lost by batsman) divided by number of balls bowled or faced. Will be zero for a not out batsman. Can be used to represent the probability of taking or losing a wicket in any given delivery. [This stat developed by JDau].
+
+  - **runs_per_ball**: Number of runs score or conceded divided by the number of balls bowled or faced. Represents the average runs score or conceded per ball in this innings. [This stat developed by JDau].
+
+  - **opposition**: The team this innings was played against
+
+  - **ground**: Which ground in India was the game played
+
+  - **start_date**: Which date the game was played
+
+  - **overs**: Represents the number of overs delivered by each bowler. This is raw data. Compare to the cleaned bb_bf column. A full over is usually 6 deliveries. A partially completed over will be shown as a decimal point where 0.1 represents 1 delivery. So 1.5 overs means the bowler 1 complete over and 5 additional balls for 11 deliveries.
+
+  - **mdns**: Number of maidens a bowler bowled. A maiden is an over of 6 balls that does not concede any runs.
+
+  - **econ**: The average number of runs conceded by the bowler per over in this innings. Compare to runs_per_ball column.
+
+  - **inns**: 1 means this was the first innings of the day. 2 represents the 2nd innings of the day. So a row that includes the value 'bowl' in the bat_or_bowl column and 1 in the inns column indicates the innings in this row occurred when that team bowled first and batted second.
+
+  - **4s**: How many 4's did the batsman score
+
+  - **6s**: How many 6's did the batsman score
+
+  - **sr**: The batsman strike rate. This has been converted to runs_per_ball by diving the sr by 100.
+
+  - **not_out**: Whether the batsman's innings was a not out or not. This column removes the need for a * beside the batsman's score.
+
+  - **mins**: Duration of a batsman's inning in minutes.
+
+*(citation for the original data set is given at the end)*
+
+## Loading data
+``` {r data, message = FALSE, echo = FALSE}
+cric <- read_csv("/srv/R/CSC285_public/Suthi /Final Project/CWC23_all_innings.csv")
+```
+
+Here are the first 20 rows of uncleaned data for your reference.
+``` {r , echo = FALSE}
+# Outputting the first 20 rows
+head(cric, n = 20)
+```
+
+
+## Cleaning up data
+
+**After looking at the data carefully**, I realized that I had multiple columns and rows with "NA" values that might affect the quality of data visualization, so I would remove those columns.
+
+``` {r, echo = FALSE}
+# Confirming columns with "NA" values exist.
+cric[16 : 20]
+
+# Directly removing columns "NA" values.
+cric <- cric[ , colSums(is.na(cric))==0]
+
+# Checking number of columns have reduced
+ncol(cric)
+```
+
+Then after running the above code I got rid of those columns. By **checking current number of columns we confirmed that a column reduction has happened** from 20 to 11.
+
+
+I would want to add an **ID column for each row** for the data set. **Why?** because each row is a **unique performance by a player**, so it would be important for us to uniquely identify each row, when it comes to **calculation, ranking, and plotting purposes.**
+
+```{r, echo = FALSE} 
+# Creating an ID column
+cric$PerformID <- 1:nrow(cric)
+
+# Relocating the ID column to front end (left end)
+cric %>% relocate(PerformID, .before= team)
+```
+
+Above is how it would look like **with the ID**, and "PerformID" is present there.
+
+
+After checking ESPN Cricinfo database *(citation is given at the end)*, I realized some specific data in the data set are incorrect, which means I would replace them with actual values.
+
+```{r, echo = FALSE}
+value <-  0.083333333
+cric[cric$player == 'D Madushanka (SL)',]
+cric$wicketball_prob[cric$player == 'D Madushanka (SL)' && cric$start_date == '2-Nov-23' ] <- value
+cric[cric$player == 'D Madushanka (SL)',]
+
+value <- 0.03333333
+cric$wicketball_prob[cric$player == 'Shoriful Islam (BAN)' && cric$start_date == '28-Oct-23' ] <- value
+cric[cric$player == 'Shoriful Islam (BAN)',]
+```
+
+We can observe that the **changes have been made**.
+
+
+Now, **after carefully observing the data set** further I can safely **confirm** that there are **no outliers, or data type conversions or, negative unexplainable values, or incorrect values exist.** It **makes sense** as in cricket (if you are a great observer) it would be very hard to have outliers or negative values unless it has been entered wrong during the data collection. But I checked the max and min values for each column by toggeling the ordering button, so I can clearly see that the data set is **cleaned enough for further processing**.
+
+
+
+## Useful information and visualizations derived from graphs
+
+### Favourite and least favourite cricket teams' performance (Awesome visualizations)
+
+**As for design choice**, I think it would be great if we could see a scatter plot of balls bowled or balls faced vs wicket probability for each team as it would help us get some information about the best players of my favorite teams.
+
+``` {r, echo = FALSE}
+#Creating a scatter plot
+ggplot(subset(cric, 
+              team %in% c("AUS", # filtering the teams
+                          "SL", 
+                          "NZ", 
+                          "SA")), 
+       aes(x= bb_bf, 
+           y= wicketball_prob, # Assigning variables for dimensions or axes
+           color = team ,
+           shape = bat_or_bowl)) + 
+    geom_point() +    # Adding a title and custom labeling 
+  labs( title = "Performance for favourite teams (Awesome)", 
+        x = "Balls faced",          # Adding a title and custom labeling 
+        y = "Wicket probability",
+        fill = "Team" )
+```
+*The graph makes sense, as we can clearly see there are some decreasing slope correlation with some points, since cricket fans would understand that, wicket probability drastically decrease when bowlers bowl a lot in a single match and then it settles down, specially in longer formats.*
+
+
+At the same time I would want to see how my least favorite teams (the teams I don't prefer winning) are doing, as it would tell me how is the competition for my favorite teams. So **as for design choice**, scatter plot would be a great option again.
+
+``` {r, echo = FALSE}
+#Creating a scatter plot
+ggplot(subset(cric, 
+              team %in% c("IND",  # filtering the teams
+                          "BAN")), 
+       aes(x= bb_bf, 
+           y= wicketball_prob, # Assigning variables for dimensions or axes
+           color = team ,
+           shape = bat_or_bowl)) + 
+    geom_point() +   # Adding a title and custom labeling 
+  labs( title = "Performance for least favourite teams (Awesome)")
+ 
+```
+
+*The graph makes sense, as we can clearly see there are some decresing slope correlation with some points just like the situation earlier, and the same way a true cricket fan would understand that, wicket probability drastically decrease when bowlers bowl a lot in a single match and then it settles down, specially in longer formats. At the same time India is better at bowling probabilities so that is why they are doing well in the graph.*
+
+
+### Best stadiums for batting and bowling (Awesome visualizations)
+
+**As for design choice**, with a scatter plot that shows best stadiums for batting we would be able to determine what are the good stadiums high scoring matches.
+
+``` {r, echo = FALSE, message = FALSE}
+#Creating a scatter plot
+ggplot(subset(cric, 
+              bat_or_bowl %in% c("bat")), # filtering the batting performances
+       aes(x= bb_bf, 
+           y= runs,  # Assigning variables for dimensions or axes
+           color = ground)) + 
+    geom_point() + geom_smooth(method=lm, se=FALSE, col = "black") +
+  labs( title = "Batting performance for different stadiums (Awesome)",
+        x = "Balls faced", 
+        y = "Runs  scored",
+        color = "Stadiums" )  # Adding a title and custom labeling 
+```
+*It would make sense to have a exponentially increasing relation between balls a batsman has faced and the runs they scored, because obviously they need to face more balls and they gets aggressive with the time when scoring runs. Specifically Wankhede stadium is known for high scoring matches.* 
+
+
+**As for design choice**, with a scatter plot that shows best stadiums for bowling we would be able to determine what are the good stadiums low scoring matches.
+
+``` {r, echo = FALSE}
+#Creating a scatter plot
+ggplot(subset(cric, 
+              bat_or_bowl %in% c("bowl")), # filtering the batting performances
+       aes(x= bb_bf, 
+           y= wicketball_prob, # Assigning variables for dimensions or axes
+           color = ground)) + 
+    geom_point() + 
+  labs( title = "Bowling performance for different stadiums (Awesome)",
+        x = "Balls bowled",
+        y = "Wicket Probability",  # Adding a title and custom labeling 
+        color = "Stadiums" )
+```
+
+*It would make sense to have a decreasing slope relation between balls a bowler has bowled and the wickets, because obviously they need to ball more balls and they get tired with the time when scoring runs. Specifically Wankhede stadium is known for good bowling.* 
+
+### Stadiums with highest run and wicket probability contributions (Awesome visualizations)
+
+**As for design choice**, pie chart would show the run contribution proportions well visually better than other graphs for each stadium.
+
+``` {r, echo = FALSE}
+#Creating a pie chart
+ggplot(cric, aes(x="", y= runs, fill= ground)) +
+  geom_bar(stat="identity", width=1) + 
+  labs( title = "Pie chart for run contribution for each stadium (Awesome)",
+       x = "Stadiums",
+       y = "Runs",  # Adding a title and custom labeling 
+       fill = "Stadiums" ) + 
+  coord_polar("y", start=0) +
+  scale_fill_brewer(palette="Paired")
+```
+*This graph makes  fully sense as Delhi and Dharmasala have highest scores in all matches on average.*
+
+**As for design choice**, pie chart would show the bowling contribution proportions well visually better than other graphs for each stadium.
+
+``` {r, echo = FALSE}
+#Creating a pie chart
+ggplot(cric, aes(x="", y= wicketball_prob, fill= ground)) +
+  geom_bar(stat="identity", width=1) + 
+  labs( title = "Pie chart for wicket probability contribution for each stadium (Awesome)",
+       x = "Stadiums",
+       y = "wicket probability",   # Adding a title and custom labeling 
+       fill = "Stadiums" ) + 
+  coord_polar("y", start=0) +
+  scale_fill_brewer(palette="Spectral")
+```
+*This graph makes  fully sense as Delhi, Chennai and Dharmasala have had highest wicket probabilities in all matches on average.*
+
+
+
+### Teams' bowling and batting performances with each other (Awful visualizations)
+
+**As for design choice**, heat maps are worst at when it comes to understanding the right values from the users point of view in my opinion, as it takes some time to read. 
+
+``` {r, echo = FALSE}
+#Creating a heat map
+ggplot(subset(cric, # bowling performance
+              bat_or_bowl %in% c("bowl")),
+       aes(x = team,
+           y = opposition,
+           fill = wicketball_prob)) +
+  geom_tile() + scale_fill_distiller(palette = "Spectral") +
+  labs(title = "Bowling performance of teams against opponents (Awful)",
+       x = "Teams",   # Adding a title and custom labeling 
+       y = "Oppositions",
+       fill = "Wicket probability" ) 
+```
+
+``` {r, echo = FALSE}
+#Creating a heat map
+ggplot(subset(cric, 
+              bat_or_bowl %in% c("bat")), # batting performance
+       aes(x = team,
+           y = opposition,
+           fill = runs_per_ball)) +
+  geom_tile()  + scale_fill_viridis(discrete = FALSE) +
+  labs(title = "Batting performance of teams against opponents (Awful)",
+       x = "Teams",          # Adding a title and custom labeling 
+       y = "Oppositions",
+       fill = "Runs per ball" )
+```
+*But still, both of these graph makes sense to an extent when it comes to realizing that a team cannot play with themselves, so that is why there are some missing colors diagonally. Also some teams did not get the chance to play with each other because of the format of the fixtures.*
+
+So after looking at above graphs I gave my best try to make **a better graph** out of this. Then I ended up with a scatter plot that looked like this.
+
+``` {r, echo = FALSE}
+# Creating a scatter plot
+ggplot(subset(cric, 
+              bat_or_bowl %in% c("bat")), # filtering the batting performances
+       aes(x= team, 
+           y= opposition, 
+           color = team,
+          size = runs_per_ball))   + 
+    geom_point()  + 
+  labs(title = "Batting performance of teams against opponents (Awesome)",
+       x = "Teams",          # Adding a title and custom labeling 
+       y = "Oppositions",
+       color = "Team",
+       size = "Runs per ball") # Adding a title and custom labeling 
+```
+
+``` {r, echo = FALSE}
+# Creating a scatter plot
+ggplot(subset(cric, 
+              bat_or_bowl %in% c("bowl")), # filtering the bowling performances
+       aes(x= team, 
+           y= opposition, 
+           color = team,
+          size = wicketball_prob))   + 
+    geom_point()  + 
+  labs(title = "Bowling performance of teams against opponents (Awesome)",
+       x = "Teams",          # Adding a title and custom labeling 
+       y = "Oppositions",
+       color = "Team",
+       size = "Wicket Probability") # Adding a title and custom labeling 
+```
+*Now they make much more sense. as we can clearly visualize teams and their oppositions with for wicket taking probability or runs per bowl rate.*
+
+## Conclusion 
+
+*After cleaning up the data set, and visualizing the data as shown above I have found some specific and useful information related to CWC23.*
+
+**Australia** had the **best batting performance** in the world cup, also South Africa comes second. **Australia** had the best batting performances **against Netherlands and New Zealand**. Meanwhile **India** had the **best bowling performance**, then Australia comes after that. **India** had the best bowling performance **against Sri Lanka**.
+
+Best stadiums **for bowling is Dharamsala** stadium and **for batting is Delhi stadium**. Also **Glenn Maxwell from Australia** was the **best batsman** in terms of runs per ball while **Dilshan Madhushanka from Sri Lanka** was the **best bowler** in terms of wicket taking probability.
+
+
+## Citation for the data set
+
+**Kaggle data set** - *https://www.kaggle.com/datasets/jdaustralia/icc-cwc23-all-innings-cleaned*
+
+**ESPN Cric Info Website** - *https://www.espncricinfo.com/records/tournament/icc-cricket-world-cup-2023-24-15338*
+ 
+
+
+
+
